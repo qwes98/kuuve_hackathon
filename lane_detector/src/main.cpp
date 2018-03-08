@@ -7,94 +7,95 @@
 #include <std_msgs/String.h>
 #include <cmath>
 #include <string>
+#include <cv_bridge/cv_bridge.h>
+#include <image_transport/image_transport.h>
+#include <sensor_msgs/image_encodings.h>
 
-//È­¸é resize
+//ÃˆÂ­Â¸Ã© resize
 #define width 960/2
 #define length 540/2
 
-//ÇÑ Á÷¼±À¸·Î º¸´Â ÀÓ°è°ª.
+//Ã‡Ã‘ ÃÃ·Â¼Â±Ã€Â¸Â·Ã ÂºÂ¸Â´Ã‚ Ã€Ã“Â°Ã¨Â°Âª.
 #define THRESHOLD 5  //5
 
-// ¶óÀÎ À§Ä¡
+// Â¶Ã³Ã€Ã Ã€Â§Ã„Â¡
 #define LINE1 -25
 #define LINE2 -30
 #define LINE3 -15
 
+ros::Publisher control_pub;
+
+double avg = 0;
+int temp = 0;
+double angle = 0.0;
 
 
-int main(int argc, char** argv)
+int fps = 500;
+
+
+Mat frame, gray, bi;
+Mat Roi;
+Mat hsv;
+Mat hsv_s;
+Mat a, b;
+
+int framecount1_R = 0;
+int framecount1_L = 0;
+
+int framecount2_R = 0;
+int framecount2_L = 0;
+
+int framecount3_R = 0;
+int framecount3_L = 0;
+
+// ÃƒÂ¹Â¹Ã¸Ã‚Â° ÃÃ‚Ã‡Â¥ ( ÃƒÂ¹Â¹Ã¸Ã‚Â° Ã‡ÃÂ·Â¹Ã€Ã“ )
+int r0_p1 = 0;
+int l0_p1 = 0;
+
+int r0_p2=0;
+int l0_p2=0;
+
+int r0_p3=0;
+int l0_p3=0;
+
+// Â¿ÃÃ‚ÃŠÃÃ‚Ã‡Â¥, Â¿Ã€Â¸Â¥Ã‚ÃŠ ÃÃ‚Ã‡Â¥
+Point right_P1;
+Point left_P1;
+
+Point right_P2;
+Point left_P2;
+
+Point right_P3;
+Point left_P3;
+
+Point middle;
+
+LaneDetect linedetect;
+
+string tmp_control_value = "";
+std_msgs::String control_msg;
+
+void imageCallback(const sensor_msgs::ImageConstPtr& image)
 {
-	ros::init(argc, argv, "lane_detector");
-	ros::NodeHandle nh;
 
-	ros::Publisher control_pub = nh.advertise<std_msgs::String>("write", 100);
-	VideoCapture cap(1);
-	// cap.open("cameraimage_color_camera3.mp4");
+		double sum = 0;
+//	delete these comments if you get images from camera directly
+//	for (;;)
+//	{
+		cv_bridge::CvImagePtr cv_ptr;
+		try {
+			cv_ptr = cv_bridge::toCvCopy(image, sensor_msgs::image_encodings::BGR8);
+		} catch(cv_bridge::Exception& e) {
+			ROS_ERROR("cv_bridge exception: %s", e.what());
+			return ;
+		}
 
-	double avg = 0;
-	double sum = 0;
-	int temp = 0;
-	double angle = 0.0;
-
-
-	if (!cap.isOpened())
-	{
-		cout << "Not opened cap" << endl;
-		return -1;
-	}
-
-	int fps = 500;
-
-
-	Mat frame, gray, bi;
-	Mat Roi;
-	Mat hsv;
-	Mat hsv_s;
-	Mat a, b;
-
-	int framecount1_R = 0;
-	int framecount1_L = 0;
-
-	int framecount2_R = 0;
-	int framecount2_L = 0;
-
-	int framecount3_R = 0;
-	int framecount3_L = 0;
-
-	// Ã¹¹øÂ° ÁÂÇ¥ ( Ã¹¹øÂ° ÇÁ·¹ÀÓ )
-	int r0_p1 = 0;
-	int l0_p1 = 0;
-
-	int r0_p2=0;
-	int l0_p2=0;
-
-	int r0_p3=0;
-	int l0_p3=0;
-
-	// ¿ŞÂÊÁÂÇ¥, ¿À¸¥ÂÊ ÁÂÇ¥
-	Point right_P1;
-	Point left_P1;
-
-	Point right_P2;
-	Point left_P2;
-
-	Point right_P3;
-	Point left_P3;
-
-	Point middle;
-
-	LaneDetect linedetect;
-
-	string tmp_control_value = "";
-	std_msgs::String control_msg;
-
-	for (;;)
-	{
 		int64 t1 = getTickCount();
 
 		temp++;
 
-		cap >> frame;
+//		cap >> frame;
+		frame = cv_ptr->image;
 
 		resize(frame, frame, Size(width, length));
 
@@ -102,8 +103,9 @@ int main(int argc, char** argv)
 		
 		if (frame.empty())
 		{
-			cout << "È­¸éÀÌ ºñ¾î ÀÖ¾î¿ä!!" << endl;
-			break;
+			cout << "ÃˆÂ­Â¸Ã©Ã€ÃŒ ÂºÃ±Â¾Ã® Ã€Ã–Â¾Ã®Â¿Ã¤!!" << endl;
+			return;
+//			break;
 		}
 
 		Roi = frame(Rect(0, length / 2, width, length / 2));
@@ -115,29 +117,29 @@ int main(int argc, char** argv)
 		vector<Mat> hsv_planes;
 
 		split(hsv, hsv_planes);
-		hsv_s = hsv_planes[1];  //s¸¸ µû±â
+		hsv_s = hsv_planes[1];  //sÂ¸Â¸ ÂµÃ»Â±Ã¢
 		*/
 		double bb = threshold(gray, b, 180, 255, THRESH_BINARY);
 		//double aa = threshold(hsv_s, a, 110, 255, THRESH_BINARY);
 
-		//bi = a + b; // bgr, hsv ÀÌÁøÈ­ µÈ°Í ÇÕÄ¡±â 
+		//bi = a + b; // bgr, hsv Ã€ÃŒÃÃ¸ÃˆÂ­ ÂµÃˆÂ°Ã Ã‡Ã•Ã„Â¡Â±Ã¢ 
 		bi = b;
 
 
-		// ¾Æ ±×³É °¥¶§´Â ÄÜÀ» Â÷¼±À¸·Î ÀÎ½ÄÇÒ ÇÊ¿ä ¾ø´Ù!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+		// Â¾Ã† Â±Ã—Â³Ã‰ Â°Â¥Â¶Â§Â´Ã‚ Ã„ÃœÃ€Â» Ã‚Ã·Â¼Â±Ã€Â¸Â·Ã Ã€ÃÂ½Ã„Ã‡Ã’ Ã‡ÃŠÂ¿Ã¤ Â¾Ã¸Â´Ã™!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
 
 
 		/*
-		ÀÌÁ¦ ³»°¡ ÇÒ ÀÏ..
-		1. ÀÌÁøÈ­µÈ È­¸é¿¡ ¿Ş¼±¿¡´Â ¿ŞÂÊ Æ÷ÀÎÆ®¸¦, ¿À¸¥¼±¿¡´Â ¿À¸¥ÂÊ Æ÷ÀÎÆ®¸¦ µĞ´Ù.
-		2. ¿ŞÂÊ Æ÷ÀÎÆ®, ¿À¸¥ÂÊ Æ÷ÀÎÆ® Áß½É Ã£±â
-		3. ³ªÀÇ À§Ä¡¿Í ±× Æ÷ÀÎÆ® À§Ä¡ Â÷ÀÌ - > Á¶Çâ°¢ // Áß½É°ú ¿ŞÆ÷ÀÎÆ®, ¿À¸¥ÂÊ Æ÷ÀÎÆ® °Å¸® - > Á¶Çâ ½ºÇÇµå
-		4. Æ÷ÀÎÆ®µéÀÇ À§Ä¡°¡ ÈÅ º¯ÇÏÁö ¾Êµµ·Ï ¿¹¿ÜÃ³¸®.
+		Ã€ÃŒÃÂ¦ Â³Â»Â°Â¡ Ã‡Ã’ Ã€Ã..
+		1. Ã€ÃŒÃÃ¸ÃˆÂ­ÂµÃˆ ÃˆÂ­Â¸Ã©Â¿Â¡ Â¿ÃÂ¼Â±Â¿Â¡Â´Ã‚ Â¿ÃÃ‚ÃŠ Ã†Ã·Ã€ÃÃ†Â®Â¸Â¦, Â¿Ã€Â¸Â¥Â¼Â±Â¿Â¡Â´Ã‚ Â¿Ã€Â¸Â¥Ã‚ÃŠ Ã†Ã·Ã€ÃÃ†Â®Â¸Â¦ ÂµÃÂ´Ã™.
+		2. Â¿ÃÃ‚ÃŠ Ã†Ã·Ã€ÃÃ†Â®, Â¿Ã€Â¸Â¥Ã‚ÃŠ Ã†Ã·Ã€ÃÃ†Â® ÃÃŸÂ½Ã‰ ÃƒÂ£Â±Ã¢
+		3. Â³ÂªÃ€Ã‡ Ã€Â§Ã„Â¡Â¿Ã Â±Ã— Ã†Ã·Ã€ÃÃ†Â® Ã€Â§Ã„Â¡ Ã‚Ã·Ã€ÃŒ - > ÃÂ¶Ã‡Ã¢Â°Â¢ // ÃÃŸÂ½Ã‰Â°Ãº Â¿ÃÃ†Ã·Ã€ÃÃ†Â®, Â¿Ã€Â¸Â¥Ã‚ÃŠ Ã†Ã·Ã€ÃÃ†Â® Â°Ã…Â¸Â® - > ÃÂ¶Ã‡Ã¢ Â½ÂºÃ‡Ã‡ÂµÃ¥
+		4. Ã†Ã·Ã€ÃÃ†Â®ÂµÃ©Ã€Ã‡ Ã€Â§Ã„Â¡Â°Â¡ ÃˆÃ… ÂºÂ¯Ã‡ÃÃÃ¶ Â¾ÃŠÂµÂµÂ·Ã Â¿Â¹Â¿ÃœÃƒÂ³Â¸Â®.
 		*/
 		
-		// ÃÊ±âÁ¡ ±¸ÇÏ±â
+		// ÃƒÃŠÂ±Ã¢ÃÂ¡ Â±Â¸Ã‡ÃÂ±Ã¢
 		if (framecount1_L < 1) {
 			l0_p1 = linedetect.find_L0_x(bi, bi.rows / 2 + LINE1, &framecount1_L , l0_p1);
 			cout << "framecount1_L  " << framecount1_L << endl;
@@ -150,7 +152,7 @@ int main(int argc, char** argv)
 		if (framecount3_L < 1) 	l0_p3 = linedetect.find_L0_x(bi, bi.rows / 2 + LINE3, &framecount3_L , l0_p3);
 		if (framecount3_R <1)	r0_p3 = linedetect.find_R0_x(bi, bi.rows /2 + LINE3, &framecount3_R , r0_p3);
 
-		// Æ÷ÀÎÆ® ±¸ÇÏ±â
+		// Ã†Ã·Ã€ÃÃ†Â® Â±Â¸Ã‡ÃÂ±Ã¢
 		right_P1.x = linedetect.find_RN_x(bi, r0_p1, LINE1, THRESHOLD);
 		right_P1.y = bi.rows / 2 + LINE1;
 		r0_p1 = right_P1.x;
@@ -189,7 +191,7 @@ int main(int argc, char** argv)
 		cout << "---------------------------------" << endl;
 		cout << "it took : " << ms << "ms." << "avg: " << avg << " fps : " << 1000 / avg << endl;
 
-		// ¸¸ÀÏ µÎ Á¡ »çÀÌ °Å¸®°¡ ³Ê¹« °¡±î¿ì¸é ´Ù½Ã ÀÎ½ÄÇØ¶ó - > ÇÑ Â÷¼±À» °°ÀÌ ÀÎ½ÄÇÏ°í ÀÖÀ¸´Ï..
+		// Â¸Â¸Ã€Ã ÂµÃ ÃÂ¡ Â»Ã§Ã€ÃŒ Â°Ã…Â¸Â®Â°Â¡ Â³ÃŠÂ¹Â« Â°Â¡Â±Ã®Â¿Ã¬Â¸Ã© Â´Ã™Â½Ãƒ Ã€ÃÂ½Ã„Ã‡Ã˜Â¶Ã³ - > Ã‡Ã‘ Ã‚Ã·Â¼Â±Ã€Â» Â°Â°Ã€ÃŒ Ã€ÃÂ½Ã„Ã‡ÃÂ°Ã­ Ã€Ã–Ã€Â¸Â´Ã..
 		if (abs(right_P1.x - left_P1.x) < 15)
 		{
 			framecount1_L = 0;
@@ -218,6 +220,7 @@ int main(int argc, char** argv)
 		//circle(frame, right_P + Point(0, length / 2), 5, Scalar(0, 255, 0), 5);
 		imshow("binary img", bi);
 		imshow("frame", frame);
+		waitKey(3);
 
 		ROS_INFO("Angle: %f", angle);
 
@@ -239,17 +242,34 @@ int main(int argc, char** argv)
 
 		control_pub.publish(control_msg);
 
-		if (waitKey(1000 / fps) >= 0) break;
+		// Why does this need?
+//		if (waitKey(1000 / fps) >= 0) break;
 
 
+//	}
+
+}
+
+int main(int argc, char** argv)
+{
+	ros::init(argc, argv, "lane_detector");
+	ros::NodeHandle nh;
+
+	control_pub = nh.advertise<std_msgs::String>("write", 100);
+
+	ros::Subscriber image_sub = nh.subscribe("/usb_cam/image_raw", 100, imageCallback);
+
+	/* get images from camera directly
+	VideoCapture cap(1);
+	//cap.open("cameraimage_color_camera3.mp4");
+
+	if (!cap.isOpened())
+	{
+		cout << "Not opened cap" << endl;
+		return -1;
 	}
+	*/
 
 	ros::spin();
 	return 0;
 }
-
-
-
-	/*
-	¾ÕÁ¡ µŞÁ¡ ¿¬°áÇØ¼­ º¸¾ÈÇÏ±â
-	*/
