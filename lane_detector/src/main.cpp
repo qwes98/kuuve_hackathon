@@ -226,13 +226,13 @@ void imageCallback(const sensor_msgs::ImageConstPtr& image)
 
 		int angle_for_msg = 0;	// For parsing double value to int
 		int control_factor = 25;
-		// arduino steering range: -1500 < steer < 1500
+		// arduino steering range: 1100 < steer < 1900
 		if(angle < control_factor && angle > (-1) * control_factor)
-			angle_for_msg = static_cast<int>(1500 / control_factor * angle);
+			angle_for_msg = static_cast<int>(1500 + 400 / control_factor * angle);
 		else if(angle >= control_factor)
-			angle_for_msg = 1500;
+			angle_for_msg = 1900;
 		else if(angle <= (-1) * control_factor)
-			angle_for_msg = -1500;
+			angle_for_msg = 1100;
 
 		tmp_control_value = to_string(angle_for_msg);
 		// cout << "test angle: " << tmp_control_value << endl;
